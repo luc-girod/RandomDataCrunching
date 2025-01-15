@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Sep  9 09:59:05 2022
-Updated on Mon Aug  7 13:22:00 2023
+Updated on Wed Jan 15 11:50:00 2024
 @author: luc-girod
 """
 
 
-folder='DataExport20240313'
+folder='DataExport2025-01-15'
 filepath = folder + "/Lea_sleep.csv"
-
+#Set end date condidering a normalized birth on 2000-01-01
+EndDate='2002-12-31 23:59:59'
 # Cleanup the file (comments break the csv structure)
 
 import re
@@ -125,6 +126,9 @@ filename_time='_1y_0-12'
 # 2nd year
 SleepDataSlice=SleepData['20010101':'20011231'] 
 filename_time='_1y_13-24'
+# 3rd year
+SleepDataSlice=SleepData['20020101':'20021231'] 
+filename_time='_1y_25-36'
 # 1st 6m
 SleepDataSlice=SleepData['20000101':'20000630'] 
 filename_time='_6m_0-6'
@@ -140,6 +144,9 @@ filename_time='_6m_19-24'
 # 2 years
 SleepDataSlice=SleepData['20000101':'20011231'] 
 filename_time='_2y_0-24'
+# 3 years
+SleepDataSlice=SleepData['20000101':'20021231'] 
+filename_time='_3y_0-36'
 
 # Separate daytime naps and night sleep, assign all night periods to same day (end of night day)
 SleepDataNap=SleepDataSlice.between_time('08:00','18:30').reset_index()
@@ -154,32 +161,38 @@ PlotScatter.figure.savefig('SleepRecord'+filename_time+'.png')
 
 
 # Count naps and night sections
-NbDailyNaps=SleepDataNap.groupby(SleepDataNap.Time.dt.date)['Duration'].count().reset_index()
-NbDailyNaps['RollingAvg14d'] = NbDailyNaps['Duration'].rolling(14).mean()
-NbDailyNight=SleepDataNight.groupby(SleepDataNight.Time.dt.date)['Duration'].count().reset_index()
-NbDailyNight.Duration=NbDailyNight.Duration-1
-NbDailyNight['RollingAvg14d'] = NbDailyNight['Duration'].rolling(14).mean()
+NbDailyNaps=SleepDataNap.groupby(SleepDataNap.Time.dt.date)['Duration'].count().reset_index().rename(columns={'Duration':'NbNaps'})
+# MAke sure every date has a number even if it's 0
+NbDailyNaps.set_index('Time',inplace=True)
+NbDailyNaps=NbDailyNaps.reindex(pd.date_range('2000-01-01 00:00:00', 
+                         EndDate, freq='d')).reset_index().rename(columns={'index':'Time'})
+NbDailyNaps['NbNaps'] = NbDailyNaps['NbNaps'].fillna(0)
+NbDailyNaps['RollingAvg14d'] = NbDailyNaps['NbNaps'].rolling(14).mean()
+
+NbDailyNight=SleepDataNight.groupby(SleepDataNight.Time.dt.date)['Duration'].count().reset_index().rename(columns={'Duration':'NbWakes'})
+NbDailyNight.NbWakes=NbDailyNight.NbWakes-1
+NbDailyNight['RollingAvg14d'] = NbDailyNight['NbWakes'].rolling(14).mean()
 
 
 
 # Plot count of daily naps
-PlotLine=NbDailyNaps.plot(x='Time',y="Duration",kind='scatter', fontsize=12, figsize=(15,6), c='r', alpha=0.1)
+PlotLine=NbDailyNaps.plot(x='Time',y="NbNaps",kind='scatter', fontsize=12, figsize=(15,6), c='r', alpha=0.1)
 NbDailyNaps.plot(ax=PlotLine, x='Time',y="RollingAvg14d",kind='line', fontsize=12, figsize=(15,6), c='r',
 xlabel="Date",ylabel="Count")
 PlotLine.legend(['Number of daily Naps (start of sleep between 08:00-18:30)','14d moving average'])
 PlotLine.figure.savefig('SleepRecord_NbNapsSections.png')
 
 # Plot count of daily night wake-ups
-PlotLine=NbDailyNight.plot(x='Time',y="Duration",kind='scatter', fontsize=12, figsize=(15,6), c='b', alpha=0.1)
+PlotLine=NbDailyNight.plot(x='Time',y="NbWakes",kind='scatter', fontsize=12, figsize=(15,6), c='b', alpha=0.1)
 NbDailyNight.plot(ax=PlotLine, x='Time',y="RollingAvg14d",kind='line', fontsize=12, figsize=(15,6), c='b',
 xlabel="Date",ylabel="Count")
 PlotLine.legend(['Number of daily Night wake-ups (between 18:30-08:00)','14d moving average'])
 PlotLine.figure.savefig('SleepRecord_NbNightSections.png')
 
 # Plot count of both
-PlotLine=NbDailyNaps.plot(x='Time',y="Duration",kind='scatter', fontsize=12, figsize=(15,6), c='r', alpha=0.1)
+PlotLine=NbDailyNaps.plot(x='Time',y="NbNaps",kind='scatter', fontsize=12, figsize=(15,6), c='r', alpha=0.1)
 NbDailyNaps.plot(ax=PlotLine, x='Time',y="RollingAvg14d",kind='line', fontsize=12, figsize=(15,6), c='r')
-NbDailyNight.plot(ax=PlotLine, x='Time',y="Duration",kind='scatter', fontsize=12, figsize=(15,6), c='b', alpha=0.1)
+NbDailyNight.plot(ax=PlotLine, x='Time',y="NbWakes",kind='scatter', fontsize=12, figsize=(15,6), c='b', alpha=0.1)
 NbDailyNight.plot(ax=PlotLine, x='Time',y="RollingAvg14d",kind='line', fontsize=12, figsize=(15,6), c='b',
 xlabel="Date",ylabel="Count")
 PlotLine.legend(['Number of daily Naps (start of sleep between 08:00-18:30)','14d moving average','Number of daily Night wake-ups (between 18:30-08:00)','14d moving average'])
@@ -187,14 +200,14 @@ PlotLine.figure.savefig('SleepRecord_Nb_Naps_NightSections.png')
 
 
 # plot single months example
-SleepDataNightSeptember = SleepDataNight[SleepDataNight['Time'].dt.month == 9]
-SleepDataNightFebruary  = SleepDataNight[SleepDataNight['Time'].dt.month == 2]
-plt.figure()
-SleepDataNightSeptember["Duration"].hist(bins=12)
-plt.savefig('September.png')
-plt.figure()
-SleepDataNightFebruary["Duration"].hist(bins=12)
-plt.savefig('February.png')
+# SleepDataNightSeptember = SleepDataNight[SleepDataNight['Time'].dt.month == 9]
+# SleepDataNightFebruary  = SleepDataNight[SleepDataNight['Time'].dt.month == 2]
+# plt.figure()
+# SleepDataNightSeptember["Duration"].hist(bins=12)
+# plt.savefig('September.png')
+# plt.figure()
+# SleepDataNightFebruary["Duration"].hist(bins=12)
+# plt.savefig('February.png')
 
 
 #Plot sleep start time vs length
@@ -202,6 +215,7 @@ SleepDataNightNoDate=SleepDataNight.copy(deep=True)
 SleepDataNightNoDate["Timeh"]=pd.Timedelta(days=1)
 for i in range(0,len(SleepDataNightNoDate)):
     SleepDataNightNoDate["Timeh"][i]=SleepDataNightNoDate.Time[i] - pd.Timestamp(SleepDataNightNoDate.Time.dt.date[i])
+
 SleepDataNightNoDate.Timeh=pd.Timestamp("2000-01-01 00:00:00")+SleepDataNightNoDate.Timeh
 
 #Create line for "wakeup at 7am"
@@ -227,6 +241,23 @@ line7am.plot(ax=PlotScatter, x='Timeh',y="Duration",kind='line', fontsize=12, fi
 xlabel="Start of sleep time",ylabel="Sleep duration")
 PlotScatter.legend(['','Woke up at 05:00','Woke up at 07:00'])
 plt.savefig('SleepRecord_NightSectionDuration.png')
+
+
+#Plot nap start time vs length
+SleepDataNapNoDate=SleepDataNap.copy(deep=True)
+SleepDataNapNoDate["Timeh"]=pd.Timedelta(days=1)
+for i in range(0,len(SleepDataNapNoDate)):
+    SleepDataNapNoDate["Timeh"][i]=SleepDataNapNoDate.Time[i] - pd.Timestamp(SleepDataNapNoDate.Time.dt.date[i])
+
+SleepDataNapNoDate.Timeh=pd.Timestamp("2000-01-01 00:00:00")+SleepDataNapNoDate.Timeh
+
+PlotScatter=SleepDataNapNoDate.plot(x='Timeh', y="Duration",kind='scatter', fontsize=12, figsize=(15,6),
+c='Time',cmap='cool',xlabel="Start of sleep time",ylabel="Sleep duration")
+xtl=[item.get_text()[6:] for item in PlotScatter.get_xticklabels()]
+PlotScatter.set_xticklabels(['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'])
+PlotScatter.legend(['Colour scalled on date'])
+plt.savefig('SleepRecord_NapDuration.png')
+
 
 
 
